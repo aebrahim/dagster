@@ -236,20 +236,26 @@ class PartitionsDefinition(ABC, Generic[T_str]):
             )
         )
 
-    def deserialize_subset(self, serialized: str) -> "PartitionsSubset[T_str]":
-        return self.partitions_subset_class.from_serialized(self, serialized)
+    def deserialize_subset(
+        self, serialized: str, error_on_different_time_partitions_def: bool = True
+    ) -> "PartitionsSubset[T_str]":
+        return self.partitions_subset_class.from_serialized(
+            self, serialized, error_on_different_time_partitions_def
+        )
 
     def can_deserialize_subset(
         self,
         serialized: str,
         serialized_partitions_def_unique_id: Optional[str],
         serialized_partitions_def_class_name: Optional[str],
+        ignore_time_partitions_def_changes: bool = False,
     ) -> bool:
         return self.partitions_subset_class.can_deserialize(
             self,
             serialized,
             serialized_partitions_def_unique_id,
             serialized_partitions_def_class_name,
+            ignore_time_partitions_def_changes,
         )
 
     def get_serializable_unique_identifier(
@@ -1003,7 +1009,10 @@ class PartitionsSubset(ABC, Generic[T_str]):
     @classmethod
     @abstractmethod
     def from_serialized(
-        cls, partitions_def: PartitionsDefinition[T_str], serialized: str
+        cls,
+        partitions_def: PartitionsDefinition[T_str],
+        serialized: str,
+        error_on_different_time_partitions_def: bool = True,
     ) -> "PartitionsSubset[T_str]": ...
 
     @classmethod
@@ -1014,6 +1023,7 @@ class PartitionsSubset(ABC, Generic[T_str]):
         serialized: str,
         serialized_partitions_def_unique_id: Optional[str],
         serialized_partitions_def_class_name: Optional[str],
+        ignore_time_partitions_def_changes: bool = False,
     ) -> bool: ...
 
     @property
@@ -1139,7 +1149,10 @@ class DefaultPartitionsSubset(PartitionsSubset[T_str]):
 
     @classmethod
     def from_serialized(
-        cls, partitions_def: PartitionsDefinition[T_str], serialized: str
+        cls,
+        partitions_def: PartitionsDefinition[T_str],
+        serialized: str,
+        error_on_different_time_partitions_def: bool = True,
     ) -> "PartitionsSubset[T_str]":
         # Check the version number, so only valid versions can be deserialized.
         data = json.loads(serialized)
@@ -1162,6 +1175,7 @@ class DefaultPartitionsSubset(PartitionsSubset[T_str]):
         serialized: str,
         serialized_partitions_def_unique_id: Optional[str],
         serialized_partitions_def_class_name: Optional[str],
+        ignore_time_partitions_def_changes: bool = False,
     ) -> bool:
         if serialized_partitions_def_class_name is not None:
             return serialized_partitions_def_class_name == partitions_def.__class__.__name__
