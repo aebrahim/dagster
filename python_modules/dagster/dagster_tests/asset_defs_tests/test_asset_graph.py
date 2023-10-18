@@ -664,7 +664,7 @@ def test_asset_graph_partial_deserialization(asset_graph_from_assets):
         )
 
     ag2_subset = AssetGraphSubset.from_storage_dict(
-        ag1_storage_dict, asset_graph=asset_graph2, allow_partial=True
+        ag1_storage_dict, asset_graph=asset_graph2, error_on_partitions_def_changed=False
     )
     assert ag2_subset == AssetGraphSubset(
         asset_graph2,

@@ -336,17 +336,25 @@ class AssetBackfillData(NamedTuple):
 
         return cls(
             target_subset=AssetGraphSubset.from_storage_dict(
-                storage_dict["serialized_target_subset"], asset_graph
+                storage_dict["serialized_target_subset"],
+                asset_graph,
+                error_on_partitions_def_changed=False,
             ),
             requested_runs_for_target_roots=storage_dict["requested_runs_for_target_roots"],
             requested_subset=AssetGraphSubset.from_storage_dict(
-                storage_dict["serialized_requested_subset"], asset_graph
+                storage_dict["serialized_requested_subset"],
+                asset_graph,
+                error_on_partitions_def_changed=False,
             ),
             materialized_subset=AssetGraphSubset.from_storage_dict(
-                storage_dict["serialized_materialized_subset"], asset_graph
+                storage_dict["serialized_materialized_subset"],
+                asset_graph,
+                error_on_partitions_def_changed=False,
             ),
             failed_and_downstream_subset=AssetGraphSubset.from_storage_dict(
-                storage_dict["serialized_failed_subset"], asset_graph
+                storage_dict["serialized_failed_subset"],
+                asset_graph,
+                error_on_partitions_def_changed=False,
             ),
             latest_storage_id=storage_dict["latest_storage_id"],
             backfill_start_time=utc_datetime_from_timestamp(backfill_start_timestamp),
@@ -666,6 +674,7 @@ def execute_asset_backfill_iteration(
         check.failed("Asset backfill missing serialized_asset_backfill_data")
 
     try:
+        # here
         previous_asset_backfill_data = AssetBackfillData.from_serialized(
             backfill.serialized_asset_backfill_data, asset_graph, backfill.backfill_timestamp
         )

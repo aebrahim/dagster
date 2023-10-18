@@ -203,6 +203,7 @@ class AssetDaemonCursor(NamedTuple):
                 continue
 
             try:
+                # here
                 # in the case that the partitions def has changed, we may not be able to deserialize
                 # the corresponding subset. in this case, we just use an empty subset
                 subset = partitions_def.deserialize_subset(serialized_subset)

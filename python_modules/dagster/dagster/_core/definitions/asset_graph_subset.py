@@ -7,6 +7,8 @@ from dagster._core.definitions.partition import (
     PartitionsDefinition,
     PartitionsSubset,
     can_deserialize,
+    from_serialized,
+    DefinitionChangedPartitionsSubset,
 )
 from dagster._core.errors import (
     DagsterDefinitionChangedDeserializationError,
@@ -230,7 +232,7 @@ class AssetGraphSubset:
         cls,
         serialized_dict: Mapping[str, Any],
         asset_graph: AssetGraph,
-        allow_partial: bool = False,
+        error_on_partitions_def_changed: bool = True,
     ) -> "AssetGraphSubset":
         serializable_partitions_ids = serialized_dict.get(
             "serializable_partitions_def_ids_by_asset_key", {}
@@ -244,7 +246,7 @@ class AssetGraphSubset:
             asset_key = AssetKey.from_user_string(key)
 
             if asset_key not in asset_graph.all_asset_keys:
-                if not allow_partial:
+                if error_on_partitions_def_changed:
                     raise DagsterDefinitionChangedDeserializationError(
                         f"Asset {key} existed at storage-time, but no longer does"
                     )
@@ -253,21 +255,23 @@ class AssetGraphSubset:
             partitions_def = asset_graph.get_partitions_def(asset_key)
 
             if partitions_def is None:
-                if not allow_partial:
+                if error_on_partitions_def_changed:
                     raise DagsterDefinitionChangedDeserializationError(
                         f"Asset {key} had a PartitionsDefinition at storage-time, but no longer"
                         " does"
                     )
                 continue
 
-            if not partitions_def.can_deserialize_subset(
+            if not can_deserialize(
+                partitions_def,
                 value,
                 serialized_partitions_def_unique_id=serializable_partitions_ids.get(key),
                 serialized_partitions_def_class_name=partitions_def_class_names_by_asset_key.get(
                     key
                 ),
+                allow_partitions_def_type_changes=error_on_partitions_def_changed,
             ):
-                if not allow_partial:
+                if error_on_partitions_def_changed:
                     raise DagsterDefinitionChangedDeserializationError(
                         f"Cannot deserialize stored partitions subset for asset {key}. This likely"
                         " indicates that the partitions definition has changed since this was"
@@ -275,7 +279,23 @@ class AssetGraphSubset:
                     )
                 continue
 
-            partitions_subsets_by_asset_key[asset_key] = partitions_def.deserialize_subset(value)
+            partitions_subset = from_serialized(
+                partitions_def,
+                value,
+                partitions_def_class_names_by_asset_key.get(key),
+                error_on_partitions_def_changed=error_on_partitions_def_changed,
+            )
+            if (
+                isinstance(partitions_subset, DefinitionChangedPartitionsSubset)
+                and error_on_partitions_def_changed
+            ):
+                raise DagsterDefinitionChangedDeserializationError(
+                    f"blah blah blah Cannot deserialize stored partitions subset for asset {key}."
+                    " This likely indicates that the partitions definition has changed since this"
+                    " was stored"
+                )
+
+            partitions_subsets_by_asset_key[asset_key] = partitions_subset
 
         non_partitioned_asset_keys = {
             AssetKey.from_user_string(key) for key in serialized_dict["non_partitioned_asset_keys"]
