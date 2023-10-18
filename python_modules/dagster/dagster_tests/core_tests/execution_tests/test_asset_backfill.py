@@ -760,8 +760,8 @@ def test_serialization(static_serialization, time_window_serialization):
         {"repo": [daily_asset, static_asset]}
     )
 
-    assert AssetBackfillData.is_valid_serialization(time_window_serialization, asset_graph) is True
-    assert AssetBackfillData.is_valid_serialization(static_serialization, asset_graph) is True
+    assert AssetBackfillData.can_deserialize(time_window_serialization, asset_graph) is True
+    assert AssetBackfillData.can_deserialize(static_serialization, asset_graph) is True
 
     daily_asset._partitions_def = static_partitions  # noqa: SLF001
     static_asset._partitions_def = time_window_partitions  # noqa: SLF001
@@ -770,8 +770,8 @@ def test_serialization(static_serialization, time_window_serialization):
         {"repo": [daily_asset, static_asset]}
     )
 
-    assert AssetBackfillData.is_valid_serialization(time_window_serialization, asset_graph) is False
-    assert AssetBackfillData.is_valid_serialization(static_serialization, asset_graph) is False
+    assert AssetBackfillData.can_deserialize(time_window_serialization, asset_graph) is False
+    assert AssetBackfillData.can_deserialize(static_serialization, asset_graph) is False
 
     static_asset._partitions_def = StaticPartitionsDefinition(keys + ["x"])  # noqa: SLF001
 
@@ -779,7 +779,9 @@ def test_serialization(static_serialization, time_window_serialization):
         {"repo": [daily_asset, static_asset]}
     )
 
-    assert AssetBackfillData.is_valid_serialization(static_serialization, asset_graph) is True
+    assert AssetBackfillData.can_deserialize(static_serialization, asset_graph) is True
+
+    # TODO add test
 
 
 def test_asset_backfill_status_counts():

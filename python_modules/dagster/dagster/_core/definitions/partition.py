@@ -1043,6 +1043,89 @@ class PartitionsSubset(ABC, Generic[T_str]):
     ) -> "PartitionsSubset[T_str]": ...
 
 
+class DefinitionChangedPartitionsSubset(NamedTuple):
+    partitions_def_class_name: str
+    partition_keys: Set[str]
+
+
+def can_deserialize(
+    partitions_def: Optional[PartitionsDefinition[T_str]],
+    serialized: str,
+    serialized_partitions_def_unique_id: Optional[str],
+    serialized_partitions_def_class_name: Optional[str],
+) -> bool:
+    from .multi_dimensional_partitions import MultiPartitionsDefinition
+    from .time_window_partitions import TimeWindowPartitionsDefinition, TimeWindowPartitionsSubset
+
+    if serialized_partitions_def_class_name is None or serialized_partitions_def_unique_id is None:
+        # Have to rely on backcompat logic
+        if partitions_def:
+            return partitions_def.can_deserialize_subset(
+                serialized,
+                serialized_partitions_def_unique_id,
+                serialized_partitions_def_class_name,
+            )
+        else:
+            # Cases that would fall into this bucket:
+            # Partitions definition has been removed and this backfill is old
+            # At this point, we can't tell which type of partitions subset this is
+            return False
+    else:
+        if serialized_partitions_def_class_name in [
+            StaticPartitionsDefinition.__class__.__name__,
+            DynamicPartitionsDefinition.__class__.__name__,
+            MultiPartitionsDefinition.__class__.__name__,
+        ]:
+            return True
+        elif (
+            serialized_partitions_def_class_name
+            == TimeWindowPartitionsDefinition.__class__.__name__
+        ):
+            # time partitions subset
+            if partitions_def is None or not isinstance(
+                partitions_def, TimeWindowPartitionsDefinition
+            ):
+                return TimeWindowPartitionsSubset.serialization_contains_time_partitions_def(
+                    serialized
+                )
+            else:  # is time partitions def
+                if (
+                    partitions_def.get_serializable_unique_identifier()
+                    == serialized_partitions_def_unique_id
+                ):
+                    return True
+
+                return TimeWindowPartitionsSubset.serialization_contains_time_partitions_def(
+                    serialized
+                )
+        else:
+            check.failed("should not reach")
+
+
+def from_serialized(
+    partitions_def: PartitionsDefinition[T_str],
+    serialized: str,
+    serialized_partitions_def_unique_id: str,
+    serialized_partitions_def_class_name: str,
+    ignore_time_partitions_def_changes: bool = False,
+) -> "PartitionsSubset[T_str]":
+    from .multi_dimensional_partitions import MultiPartitionsDefinition
+    from .time_window_partitions import TimeWindowPartitionsDefinition
+
+    if serialized_partitions_def_class_name in [
+        StaticPartitionsDefinition.__class__.__name__,
+        DynamicPartitionsDefinition.__class__.__name__,
+        MultiPartitionsDefinition.__class__.__name__,
+    ]:
+        # default partitions subset
+        pass
+    elif serialized_partitions_def_class_name == TimeWindowPartitionsDefinition.__class__.__name__:
+        # time partitions subset
+        pass
+    else:
+        check.failed("should not reach")
+
+
 @whitelist_for_serdes
 class SerializedPartitionsSubset(NamedTuple):
     serialized_subset: str
@@ -1065,14 +1148,11 @@ class SerializedPartitionsSubset(NamedTuple):
         )
 
     def can_deserialize(self, partitions_def: Optional[PartitionsDefinition]) -> bool:
-        if not partitions_def:
-            # Asset had a partitions definition at storage time, but no longer does
-            return False
-
-        return partitions_def.can_deserialize_subset(
+        return can_deserialize(
+            partitions_def,
             self.serialized_subset,
-            serialized_partitions_def_unique_id=self.serialized_partitions_def_unique_id,
-            serialized_partitions_def_class_name=self.serialized_partitions_def_class_name,
+            self.serialized_partitions_def_unique_id,
+            self.serialized_partitions_def_class_name,
         )
 
     def deserialize(self, partitions_def: PartitionsDefinition) -> PartitionsSubset:
@@ -1174,12 +1254,7 @@ class DefaultPartitionsSubset(PartitionsSubset[T_str]):
         partitions_def: PartitionsDefinition[T_str],
         serialized: str,
         serialized_partitions_def_unique_id: Optional[str],
-        serialized_partitions_def_class_name: Optional[str],
-        ignore_time_partitions_def_changes: bool = False,
     ) -> bool:
-        if serialized_partitions_def_class_name is not None:
-            return serialized_partitions_def_class_name == partitions_def.__class__.__name__
-
         data = json.loads(serialized)
         return isinstance(data, list) or (
             data.get("subset") is not None and data.get("version") == cls.SERIALIZATION_VERSION

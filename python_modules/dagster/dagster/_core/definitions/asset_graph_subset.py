@@ -6,6 +6,7 @@ from dagster import _check as check
 from dagster._core.definitions.partition import (
     PartitionsDefinition,
     PartitionsSubset,
+    can_deserialize,
 )
 from dagster._core.errors import (
     DagsterDefinitionChangedDeserializationError,
@@ -214,16 +215,11 @@ class AssetGraphSubset:
             asset_key = AssetKey.from_user_string(key)
             partitions_def = asset_graph.get_partitions_def(asset_key)
 
-            if partitions_def is None:
-                # Asset had a partitions definition at storage time, but no longer does
-                return False
-
-            if not partitions_def.can_deserialize_subset(
+            if not can_deserialize(
+                partitions_def,
                 value,
-                serialized_partitions_def_unique_id=serializable_partitions_ids.get(key),
-                serialized_partitions_def_class_name=partitions_def_class_names_by_asset_key.get(
-                    key
-                ),
+                serializable_partitions_ids.get(key),
+                partitions_def_class_names_by_asset_key.get(key),
             ):
                 return False
 

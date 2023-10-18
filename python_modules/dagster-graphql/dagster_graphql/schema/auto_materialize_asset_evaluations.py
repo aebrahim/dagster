@@ -12,7 +12,7 @@ from dagster._core.definitions.auto_materialize_rule import (
     TextRuleEvaluationData,
     WaitingOnAssetsRuleEvaluationData,
 )
-from dagster._core.definitions.partition import SerializedPartitionsSubset
+from dagster._core.definitions.partition import SerializedPartitionsSubset, can_deserialize
 from dagster._core.scheduler.instigation import AutoMaterializeAssetEvaluationRecord
 
 from dagster_graphql.schema.errors import GrapheneError

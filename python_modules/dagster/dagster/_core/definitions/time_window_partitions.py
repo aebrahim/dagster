@@ -1596,7 +1596,7 @@ class TimeWindowPartitionsSubset(PartitionsSubset):
                 num_partitions = loaded["num_partitions"]
             elif version == 2:
                 deserialized_partitions_def = deserialize_value(
-                    loaded["partitions_def"], TimeWindowPartitionsDefinition
+                    loaded["time_partitions_def"], TimeWindowPartitionsDefinition
                 )
                 time_windows = tuples_to_time_windows(loaded["time_windows"])
                 num_partitions = loaded["num_partitions"]
@@ -1620,52 +1620,40 @@ class TimeWindowPartitionsSubset(PartitionsSubset):
         )
 
     @classmethod
+    def serialization_contains_time_partitions_def(cls, serialized: str) -> bool:
+        data = json.loads(serialized)
+
+        if isinstance(data, list):
+            return False
+
+        check.invariant(isinstance(data, dict))
+
+        if data.get("version", 0) < 2:  # Serialization version with time partitions def
+            return False
+
+        check.invariant(data.get("time_partitions_def") is not None)
+
+        return True
+
+    @classmethod
     def can_deserialize(
         cls,
         partitions_def: PartitionsDefinition,
         serialized: str,
         serialized_partitions_def_unique_id: Optional[str],
-        serialized_partitions_def_class_name: Optional[str],
-        ignore_time_partitions_def_changes: bool = False,
     ) -> bool:
-        def _is_same_partitions_def_or_none(
-            serialized_partitions_def: Optional[str],
-        ) -> bool:
-            partitions_def = (
-                deserialize_value(serialized_partitions_def, TimeWindowPartitionsDefinition)
-                if serialized_partitions_def
-                else None
-            )
-            return (
-                partitions_def is None
-                or partitions_def.get_serializable_unique_identifier(dynamic_partitions_store=None)
-                == serialized_partitions_def_unique_id
-            )
-
         if serialized_partitions_def_unique_id:
             return (
                 partitions_def.get_serializable_unique_identifier()
                 == serialized_partitions_def_unique_id
             )
 
-        if (
-            serialized_partitions_def_class_name
-            # note: all TimeWindowPartitionsDefinition subclasses will get serialized as raw
-            # TimeWindowPartitionsDefinitions, so this class name check will not always pass,
-            # hence the unique id check above
-            and serialized_partitions_def_class_name != partitions_def.__class__.__name__
-        ):
-            return False
-
+        # TODO What happens in this case? do we just get the existent partitions?
         data = json.loads(serialized)
         return isinstance(data, list) or (
             isinstance(data, dict)
             and data.get("time_windows") is not None
             and data.get("num_partitions") is not None
-            and (
-                ignore_time_partitions_def_changes is True
-                or _is_same_partitions_def_or_none(data.get("partitions_def"))
-            )
         )
 
     @classmethod
@@ -1684,7 +1672,7 @@ class TimeWindowPartitionsSubset(PartitionsSubset):
                     for window in self.included_time_windows
                 ],
                 "num_partitions": self._num_partitions,
-                "partitions_def": serialize_value(
+                "time_partitions_def": serialize_value(
                     cast(TimeWindowPartitionsDefinition, self.partitions_def)
                 ),
             }

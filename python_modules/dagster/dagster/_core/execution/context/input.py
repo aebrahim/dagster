@@ -696,8 +696,6 @@ class KeyRangeNoPartitionsDefPartitionsSubset(PartitionsSubset):
         partitions_def: "PartitionsDefinition",
         serialized: str,
         serialized_partitions_def_unique_id: Optional[str],
-        serialized_partitions_def_class_name: Optional[str],
-        ignore_time_partitions_def_changes: bool = False,
     ) -> bool:
         raise NotImplementedError()
 
