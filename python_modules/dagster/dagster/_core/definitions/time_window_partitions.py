@@ -1582,6 +1582,46 @@ class TimeWindowPartitionsSubset(PartitionsSubset):
         )
 
     @classmethod
+    def tuples_to_time_windows(cls, tuples, partitions_def):
+        return [
+            TimeWindow(
+                pendulum.from_timestamp(tup[0], tz=partitions_def.timezone),
+                pendulum.from_timestamp(tup[1], tz=partitions_def.timezone),
+            )
+            for tup in tuples
+        ]
+
+    @classmethod
+    def _deserialize_v1_v2_time_subset(
+        cls, serialized: str
+    ) -> Tuple[Optional[TimeWindowPartitionsDefinition], Sequence[TimeWindow], int]:
+        loaded = json.loads(serialized)
+
+        check.invariant(isinstance(loaded, dict))
+
+        version = loaded.get("version")
+        if version is None or version == 1:
+            # TODO handle partiitons def here
+            deserialized_partitions_def = None
+            time_windows = cls.tuples_to_time_windows(loaded["time_windows"])
+            num_partitions = loaded["num_partitions"]
+        elif version == 2:
+            deserialized_partitions_def = deserialize_value(
+                loaded["time_partitions_def"], TimeWindowPartitionsDefinition
+            )
+            time_windows = cls.tuples_to_time_windows(
+                loaded["time_windows"], deserialized_partitions_def
+            )
+            num_partitions = loaded["num_partitions"]
+        else:
+            raise DagsterInvalidDeserializationVersionError(
+                "Attempted to deserialize partition subset with version"
+                f" {loaded.get('version')}, but only versions 1 and 2 are supported."
+            )
+
+        return deserialized_partitions_def, time_windows, num_partitions
+
+    @classmethod
     def from_serialized(
         cls,
         partitions_def: PartitionsDefinition,
@@ -1594,50 +1634,26 @@ class TimeWindowPartitionsSubset(PartitionsSubset):
 
         loaded = json.loads(serialized)
 
-        def tuples_to_time_windows(tuples):
-            return [
-                TimeWindow(
-                    pendulum.from_timestamp(tup[0], tz=partitions_def.timezone),
-                    pendulum.from_timestamp(tup[1], tz=partitions_def.timezone),
-                )
-                for tup in tuples
-            ]
-
         if isinstance(loaded, list):
             # backwards compatibility
-            time_windows = tuples_to_time_windows(loaded)
+            time_windows = cls.tuples_to_time_windows(loaded)
             num_partitions = sum(
                 len(partitions_def.get_partition_keys_in_time_window(time_window))
                 for time_window in time_windows
             )
         else:
-            check.invariant(isinstance(loaded, dict))
+            _, time_windows, num_partitions = cls._deserialize_v1_v2_time_subset(serialized)
 
-            version = loaded.get("version")
-            if version is None or version == 1:
-                time_windows = tuples_to_time_windows(loaded["time_windows"])
-                num_partitions = loaded["num_partitions"]
-            elif version == 2:
-                deserialized_partitions_def = deserialize_value(
-                    loaded["time_partitions_def"], TimeWindowPartitionsDefinition
-                )
-                time_windows = tuples_to_time_windows(loaded["time_windows"])
-                num_partitions = loaded["num_partitions"]
-                if (
-                    error_on_different_time_partitions_def
-                    and deserialized_partitions_def != partitions_def
-                ):
-                    raise DagsterDefinitionChangedDeserializationError(
-                        "The partitions definition has changed since storage-time. \n"
-                        f" Storage-time partitions definition: {deserialized_partitions_def} \n"
-                        f" Current partitions definition: {partitions_def}"
-                    )
-            else:
-                raise DagsterInvalidDeserializationVersionError(
-                    "Attempted to deserialize partition subset with version"
-                    f" {loaded.get('version')}, but only versions 1 and 2 are supported."
-                )
+        return TimeWindowPartitionsSubset(
+            partitions_def, num_partitions=num_partitions, included_time_windows=time_windows
+        )
 
+    @classmethod
+    def deserialize_when_partitions_def_changed(cls, serialized: str) -> "PartitionsSubset":
+        partitions_def, time_windows, num_partitions = cls._deserialize_v1_v2_time_subset(
+            serialized
+        )
+        check.invariant(partitions_def is not None)
         return TimeWindowPartitionsSubset(
             partitions_def, num_partitions=num_partitions, included_time_windows=time_windows
         )

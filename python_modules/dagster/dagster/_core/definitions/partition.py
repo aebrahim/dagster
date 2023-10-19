@@ -1131,7 +1131,7 @@ def can_deserialize(
     serialized: str,
     serialized_partitions_def_unique_id: Optional[str],
     serialized_partitions_def_class_name: Optional[str],
-    allow_partitions_def_type_changes: bool = False,
+    do_not_allow_partitions_defs_changes: bool = True,
 ) -> bool:
     from .multi_dimensional_partitions import MultiPartitionsDefinition
     from .time_window_partitions import TimeWindowPartitionsDefinition, TimeWindowPartitionsSubset
@@ -1155,21 +1155,27 @@ def can_deserialize(
         if serialized_partitions_def_class_name in [
             partitions_def.__name__ for partitions_def in DEFAULT_PARTITIONS_SUBSET_PARTITIONS_DEFS
         ]:
-            if allow_partitions_def_type_changes:
-                return True
-            else:
-                return isinstance(partitions_def, DEFAULT_PARTITIONS_SUBSET_PARTITIONS_DEFS)
+            if partitions_def is None or not isinstance(
+                partitions_def, DEFAULT_PARTITIONS_SUBSET_PARTITIONS_DEFS
+            ):
+                if do_not_allow_partitions_defs_changes:
+                    # Partitions def changed from non-time to time or None
+                    return False
+
+            # Can always deserialize a default partitions subset
+            return True
         elif serialized_partitions_def_class_name == TimeWindowPartitionsDefinition.__name__:
             # time partitions subset
             if partitions_def is None or not isinstance(
                 partitions_def, TimeWindowPartitionsDefinition
             ):
-                if allow_partitions_def_type_changes:
+                if do_not_allow_partitions_defs_changes:
+                    # Partitions def changed from time to non-time or None
+                    return False
+                else:
                     return TimeWindowPartitionsSubset.serialization_contains_time_partitions_def(
                         serialized
                     )
-                else:
-                    return False
 
             if (
                 partitions_def.get_serializable_unique_identifier()
@@ -1179,8 +1185,6 @@ def can_deserialize(
 
             return TimeWindowPartitionsSubset.serialization_contains_time_partitions_def(serialized)
         else:
-            print("wtf", serialized_partitions_def_class_name)
-            print(TimeWindowPartitionsDefinition.__name__)
             check.failed("should not reach")
 
 
@@ -1230,11 +1234,10 @@ def from_serialized(
                 )
 
             if TimeWindowPartitionsSubset.serialization_contains_time_partitions_def(serialized):
-                return partitions_def.deserialize_subset(
-                    serialized,
-                    error_on_different_time_partitions_def=error_on_partitions_def_changed,
+                # Is not a time window partitions subset anymore
+                return TimeWindowPartitionsSubset.deserialize_when_partitions_def_changed(
+                    serialized
                 )
-
             raise DagsterDefinitionChangedDeserializationError(
                 "Cannot deserialize partitions subset. The partitions definition has changed"
             )

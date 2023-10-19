@@ -222,6 +222,7 @@ class AssetGraphSubset:
                 value,
                 serializable_partitions_ids.get(key),
                 partitions_def_class_names_by_asset_key.get(key),
+                do_not_allow_partitions_defs_changes=False,
             ):
                 return False
 
@@ -269,7 +270,7 @@ class AssetGraphSubset:
                 serialized_partitions_def_class_name=partitions_def_class_names_by_asset_key.get(
                     key
                 ),
-                allow_partitions_def_type_changes=error_on_partitions_def_changed,
+                do_not_allow_partitions_defs_changes=error_on_partitions_def_changed,
             ):
                 if error_on_partitions_def_changed:
                     raise DagsterDefinitionChangedDeserializationError(
